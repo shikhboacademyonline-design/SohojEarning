@@ -69,7 +69,8 @@ const STORAGE_KEYS = {
   REVIEWS_CACHE: 'sohoje_income_reviews_cache_v2',
   EARNINGS_CACHE: 'sohoje_income_earnings_cache_v2',
   ADMIN_AUTH: 'sohoje_income_admin_auth_v1',
-  SEEDED_FLAG: 'sohoje_income_cloud_seeded_v2',
+  SEEDED_FLAG: 'sohoje_income_cloud_seeded_v3',
+  DELETED_IDS: 'sohoje_income_deleted_ids_v3',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -80,6 +81,19 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function getStoredDeletedIds(): string[] {
+  return loadFromStorage<string[]>(STORAGE_KEYS.DELETED_IDS, []);
+}
+
+function filterOutDeleted<T extends { id: string }>(
+  items: T[],
+  deletedIds: string[]
+): T[] {
+  if (!deletedIds.length) return items;
+  const delSet = new Set(deletedIds);
+  return items.filter((item) => !delSet.has(item.id));
 }
 
 function sanitizeUserForFirestore(user: UserProfile): Record<string, unknown> {
@@ -114,36 +128,58 @@ const CATEGORY_LABELS: Record<TaskCategory, string> = {
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
 
+  const deletedIdsRef = useRef<string[]>(getStoredDeletedIds());
+
   // Local device permanent user + Cloud Firestore state with localStorage fallback cache
-  const [deviceUser, setDeviceUser] = useState<UserProfile | null>(() =>
-    loadFromStorage<UserProfile | null>(STORAGE_KEYS.DEVICE_USER, null)
-  );
+  const [deviceUser, setDeviceUser] = useState<UserProfile | null>(() => {
+    const u = loadFromStorage<UserProfile | null>(STORAGE_KEYS.DEVICE_USER, null);
+    if (u && getStoredDeletedIds().includes(u.id)) return null;
+    return u;
+  });
   const [users, setUsers] = useState<UserProfile[]>(() =>
-    loadFromStorage<UserProfile[]>(STORAGE_KEYS.USERS_CACHE, INITIAL_USERS)
+    filterOutDeleted(
+      loadFromStorage<UserProfile[]>(STORAGE_KEYS.USERS_CACHE, INITIAL_USERS),
+      getStoredDeletedIds()
+    )
   );
   const [ads, setAds] = useState<AdItem[]>(() =>
-    loadFromStorage<AdItem[]>(STORAGE_KEYS.ADS_CACHE, INITIAL_ADS)
+    filterOutDeleted(
+      loadFromStorage<AdItem[]>(STORAGE_KEYS.ADS_CACHE, INITIAL_ADS),
+      getStoredDeletedIds()
+    )
   );
   const [tasks, setTasks] = useState<DiscoverTask[]>(() =>
-    loadFromStorage<DiscoverTask[]>(
-      STORAGE_KEYS.TASKS_CACHE,
-      INITIAL_DISCOVER_TASKS
+    filterOutDeleted(
+      loadFromStorage<DiscoverTask[]>(
+        STORAGE_KEYS.TASKS_CACHE,
+        INITIAL_DISCOVER_TASKS
+      ),
+      getStoredDeletedIds()
     )
   );
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>(() =>
-    loadFromStorage<WithdrawalRequest[]>(
-      STORAGE_KEYS.WITHDRAWALS_CACHE,
-      INITIAL_WITHDRAWALS
+    filterOutDeleted(
+      loadFromStorage<WithdrawalRequest[]>(
+        STORAGE_KEYS.WITHDRAWALS_CACHE,
+        INITIAL_WITHDRAWALS
+      ),
+      getStoredDeletedIds()
     )
   );
   const [referrals, setReferrals] = useState<ReferralEntry[]>(() =>
-    loadFromStorage<ReferralEntry[]>(
-      STORAGE_KEYS.REFERRALS_CACHE,
-      INITIAL_REFERRALS
+    filterOutDeleted(
+      loadFromStorage<ReferralEntry[]>(
+        STORAGE_KEYS.REFERRALS_CACHE,
+        INITIAL_REFERRALS
+      ),
+      getStoredDeletedIds()
     )
   );
   const [reviews, setReviews] = useState<UserReview[]>(() =>
-    loadFromStorage<UserReview[]>(STORAGE_KEYS.REVIEWS_CACHE, INITIAL_REVIEWS)
+    filterOutDeleted(
+      loadFromStorage<UserReview[]>(STORAGE_KEYS.REVIEWS_CACHE, INITIAL_REVIEWS),
+      getStoredDeletedIds()
+    )
   );
   const [earnings, setEarnings] = useState<EarningRecord[]>(() =>
     loadFromStorage<EarningRecord[]>(
@@ -162,7 +198,16 @@ export default function App() {
   const [urlRefCode, setUrlRefCode] = useState('');
   const [activeAdModal, setActiveAdModal] = useState<AdItem | null>(null);
   const [latestWithdrawalPopup, setLatestWithdrawalPopup] =
-    useState<WithdrawalRequest | null>(() => INITIAL_WITHDRAWALS[0] || null);
+    useState<WithdrawalRequest | null>(() => {
+      const initialWds = filterOutDeleted(
+        loadFromStorage<WithdrawalRequest[]>(
+          STORAGE_KEYS.WITHDRAWALS_CACHE,
+          INITIAL_WITHDRAWALS
+        ),
+        getStoredDeletedIds()
+      );
+      return initialWds[0] || null;
+    });
   const [withdrawSuccessInfo, setWithdrawSuccessInfo] = useState<{
     open: boolean;
     amount: number;
@@ -173,6 +218,30 @@ export default function App() {
   const seededRef = useRef<boolean>(
     loadFromStorage<boolean>(STORAGE_KEYS.SEEDED_FLAG, false)
   );
+
+  const markDatabaseSeeded = () => {
+    seededRef.current = true;
+    localStorage.setItem(STORAGE_KEYS.SEEDED_FLAG, 'true');
+  };
+
+  const registerDeletedId = async (id: string) => {
+    markDatabaseSeeded();
+    if (!deletedIdsRef.current.includes(id)) {
+      deletedIdsRef.current = [...deletedIdsRef.current, id];
+      localStorage.setItem(
+        STORAGE_KEYS.DELETED_IDS,
+        JSON.stringify(deletedIdsRef.current)
+      );
+    }
+    try {
+      await setDoc(doc(db, 'test', 'system_state'), {
+        seeded: true,
+        deletedIds: deletedIdsRef.current.slice(-500),
+      });
+    } catch {
+      // Ignore transient network errors for system_state
+    }
+  };
 
   // Sync state to localStorage cache so actions are always instant and persistent
   useEffect(() => {
@@ -225,18 +294,78 @@ export default function App() {
 
   // Real-time Firestore Synchronization across all devices
   useEffect(() => {
+    // 0. System State (tracks permanent deletions & seed status across all devices)
+    const unsubSystemState = onSnapshot(
+      doc(db, 'test', 'system_state'),
+      async (docSnap) => {
+        if (docSnap.exists()) {
+          markDatabaseSeeded();
+          const data = docSnap.data() as {
+            seeded?: boolean;
+            deletedIds?: string[];
+          };
+          if (Array.isArray(data.deletedIds) && data.deletedIds.length > 0) {
+            const merged = Array.from(
+              new Set([...deletedIdsRef.current, ...data.deletedIds])
+            );
+            deletedIdsRef.current = merged;
+            localStorage.setItem(
+              STORAGE_KEYS.DELETED_IDS,
+              JSON.stringify(merged)
+            );
+            setUsers((prev) => filterOutDeleted(prev, merged));
+            setAds((prev) => filterOutDeleted(prev, merged));
+            setWithdrawals((prev) => {
+              const next = filterOutDeleted(prev, merged);
+              setLatestWithdrawalPopup((curr) =>
+                curr && merged.includes(curr.id) ? next[0] || null : curr
+              );
+              return next;
+            });
+            setTasks((prev) => filterOutDeleted(prev, merged));
+            setReferrals((prev) => filterOutDeleted(prev, merged));
+            setReviews((prev) => filterOutDeleted(prev, merged));
+          }
+        } else {
+          markDatabaseSeeded();
+          try {
+            await setDoc(doc(db, 'test', 'system_state'), {
+              seeded: true,
+              deletedIds: deletedIdsRef.current,
+            });
+          } catch {
+            // Ignore
+          }
+        }
+      },
+      () => {
+        // Ignore system_state read errors
+      }
+    );
+
     // 1. Users Collection
     const unsubUsers = onSnapshot(
       collection(db, 'users'),
       async (snapshot) => {
-        if (snapshot.empty && !seededRef.current) {
-          seededRef.current = true;
-          localStorage.setItem(STORAGE_KEYS.SEEDED_FLAG, 'true');
+        if (
+          snapshot.empty &&
+          !seededRef.current &&
+          deletedIdsRef.current.length === 0
+        ) {
+          markDatabaseSeeded();
           try {
             for (const u of INITIAL_USERS) {
-              await setDoc(doc(db, 'users', u.id), sanitizeUserForFirestore(u));
+              if (!deletedIdsRef.current.includes(u.id)) {
+                await setDoc(
+                  doc(db, 'users', u.id),
+                  sanitizeUserForFirestore(u)
+                );
+              }
             }
-            if (deviceUser) {
+            if (
+              deviceUser &&
+              !deletedIdsRef.current.includes(deviceUser.id)
+            ) {
               await setDoc(
                 doc(db, 'users', deviceUser.id),
                 sanitizeUserForFirestore(deviceUser)
@@ -247,15 +376,32 @@ export default function App() {
           }
           return;
         }
-        const loadedUsers = snapshot.docs.map(
-          (d) => d.data() as UserProfile
-        );
-        if (loadedUsers.length > 0) {
-          setUsers(loadedUsers);
-          const myDeviceId =
-            localStorage.getItem(STORAGE_KEYS.DEVICE_USER_ID) ||
-            deviceUser?.id;
-          if (myDeviceId) {
+
+        if (!snapshot.empty) {
+          markDatabaseSeeded();
+        }
+
+        const delSet = new Set(deletedIdsRef.current);
+        snapshot.docs.forEach((d) => {
+          if (delSet.has(d.id)) {
+            deleteDoc(doc(db, 'users', d.id)).catch(() => {});
+          }
+        });
+
+        const loadedUsers = snapshot.docs
+          .map((d) => d.data() as UserProfile)
+          .filter((u) => !delSet.has(u.id));
+
+        setUsers(loadedUsers);
+
+        const myDeviceId =
+          localStorage.getItem(STORAGE_KEYS.DEVICE_USER_ID) || deviceUser?.id;
+        if (myDeviceId) {
+          if (delSet.has(myDeviceId)) {
+            setDeviceUser(null);
+            localStorage.removeItem(STORAGE_KEYS.DEVICE_USER);
+            localStorage.removeItem(STORAGE_KEYS.DEVICE_USER_ID);
+          } else {
             const matched = loadedUsers.find((u) => u.id === myDeviceId);
             if (matched) {
               setDeviceUser(matched);
@@ -272,22 +418,40 @@ export default function App() {
     const unsubAds = onSnapshot(
       collection(db, 'ads'),
       async (snapshot) => {
-        if (snapshot.empty && !seededRef.current) {
+        if (
+          snapshot.empty &&
+          !seededRef.current &&
+          deletedIdsRef.current.length === 0
+        ) {
+          markDatabaseSeeded();
           try {
             for (const ad of INITIAL_ADS) {
-              await setDoc(doc(db, 'ads', ad.id), ad);
+              if (!deletedIdsRef.current.includes(ad.id)) {
+                await setDoc(doc(db, 'ads', ad.id), ad);
+              }
             }
           } catch (error) {
             handleFirestoreError(error, OperationType.WRITE, 'ads');
           }
           return;
         }
+
         if (!snapshot.empty) {
-          const loadedAds = snapshot.docs
-            .map((d) => d.data() as AdItem)
-            .sort((a, b) => a.id.localeCompare(b.id));
-          setAds(loadedAds);
+          markDatabaseSeeded();
         }
+
+        const delSet = new Set(deletedIdsRef.current);
+        snapshot.docs.forEach((d) => {
+          if (delSet.has(d.id)) {
+            deleteDoc(doc(db, 'ads', d.id)).catch(() => {});
+          }
+        });
+
+        const loadedAds = snapshot.docs
+          .map((d) => d.data() as AdItem)
+          .filter((a) => !delSet.has(a.id))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        setAds(loadedAds);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, 'ads');
@@ -298,23 +462,41 @@ export default function App() {
     const unsubWithdrawals = onSnapshot(
       collection(db, 'withdrawals'),
       async (snapshot) => {
-        if (snapshot.empty && !seededRef.current) {
+        if (
+          snapshot.empty &&
+          !seededRef.current &&
+          deletedIdsRef.current.length === 0
+        ) {
+          markDatabaseSeeded();
           try {
             for (const w of INITIAL_WITHDRAWALS) {
-              await setDoc(doc(db, 'withdrawals', w.id), w);
+              if (!deletedIdsRef.current.includes(w.id)) {
+                await setDoc(doc(db, 'withdrawals', w.id), w);
+              }
             }
           } catch (error) {
             handleFirestoreError(error, OperationType.WRITE, 'withdrawals');
           }
           return;
         }
+
         if (!snapshot.empty) {
-          const loadedWds = snapshot.docs
-            .map((d) => d.data() as WithdrawalRequest)
-            .sort((a, b) => b.id.localeCompare(a.id));
-          setWithdrawals(loadedWds);
-          setLatestWithdrawalPopup(loadedWds[0]);
+          markDatabaseSeeded();
         }
+
+        const delSet = new Set(deletedIdsRef.current);
+        snapshot.docs.forEach((d) => {
+          if (delSet.has(d.id)) {
+            deleteDoc(doc(db, 'withdrawals', d.id)).catch(() => {});
+          }
+        });
+
+        const loadedWds = snapshot.docs
+          .map((d) => d.data() as WithdrawalRequest)
+          .filter((w) => !delSet.has(w.id))
+          .sort((a, b) => b.id.localeCompare(a.id));
+        setWithdrawals(loadedWds);
+        setLatestWithdrawalPopup(loadedWds[0] || null);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, 'withdrawals');
@@ -325,22 +507,34 @@ export default function App() {
     const unsubReferrals = onSnapshot(
       collection(db, 'referrals'),
       async (snapshot) => {
-        if (snapshot.empty && !seededRef.current) {
+        if (
+          snapshot.empty &&
+          !seededRef.current &&
+          deletedIdsRef.current.length === 0
+        ) {
+          markDatabaseSeeded();
           try {
             for (const r of INITIAL_REFERRALS) {
-              await setDoc(doc(db, 'referrals', r.id), r);
+              if (!deletedIdsRef.current.includes(r.id)) {
+                await setDoc(doc(db, 'referrals', r.id), r);
+              }
             }
           } catch (error) {
             handleFirestoreError(error, OperationType.WRITE, 'referrals');
           }
           return;
         }
+
         if (!snapshot.empty) {
-          const loadedRefs = snapshot.docs
-            .map((d) => d.data() as ReferralEntry)
-            .sort((a, b) => b.id.localeCompare(a.id));
-          setReferrals(loadedRefs);
+          markDatabaseSeeded();
         }
+
+        const delSet = new Set(deletedIdsRef.current);
+        const loadedRefs = snapshot.docs
+          .map((d) => d.data() as ReferralEntry)
+          .filter((r) => !delSet.has(r.id))
+          .sort((a, b) => b.id.localeCompare(a.id));
+        setReferrals(loadedRefs);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, 'referrals');
@@ -351,22 +545,34 @@ export default function App() {
     const unsubReviews = onSnapshot(
       collection(db, 'reviews'),
       async (snapshot) => {
-        if (snapshot.empty && !seededRef.current) {
+        if (
+          snapshot.empty &&
+          !seededRef.current &&
+          deletedIdsRef.current.length === 0
+        ) {
+          markDatabaseSeeded();
           try {
             for (const rev of INITIAL_REVIEWS) {
-              await setDoc(doc(db, 'reviews', rev.id), rev);
+              if (!deletedIdsRef.current.includes(rev.id)) {
+                await setDoc(doc(db, 'reviews', rev.id), rev);
+              }
             }
           } catch (error) {
             handleFirestoreError(error, OperationType.WRITE, 'reviews');
           }
           return;
         }
+
         if (!snapshot.empty) {
-          const loadedRevs = snapshot.docs
-            .map((d) => d.data() as UserReview)
-            .sort((a, b) => b.id.localeCompare(a.id));
-          setReviews(loadedRevs);
+          markDatabaseSeeded();
         }
+
+        const delSet = new Set(deletedIdsRef.current);
+        const loadedRevs = snapshot.docs
+          .map((d) => d.data() as UserReview)
+          .filter((r) => !delSet.has(r.id))
+          .sort((a, b) => b.id.localeCompare(a.id));
+        setReviews(loadedRevs);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, 'reviews');
@@ -377,12 +583,10 @@ export default function App() {
     const unsubEarnings = onSnapshot(
       collection(db, 'earnings'),
       (snapshot) => {
-        if (!snapshot.empty) {
-          const loadedEarns = snapshot.docs
-            .map((d) => d.data() as EarningRecord)
-            .sort((a, b) => b.id.localeCompare(a.id));
-          setEarnings(loadedEarns);
-        }
+        const loadedEarns = snapshot.docs
+          .map((d) => d.data() as EarningRecord)
+          .sort((a, b) => b.id.localeCompare(a.id));
+        setEarnings(loadedEarns);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, 'earnings');
@@ -393,22 +597,39 @@ export default function App() {
     const unsubTasks = onSnapshot(
       collection(db, 'tasks'),
       async (snapshot) => {
-        if (snapshot.empty && !seededRef.current) {
+        if (
+          snapshot.empty &&
+          !seededRef.current &&
+          deletedIdsRef.current.length === 0
+        ) {
+          markDatabaseSeeded();
           try {
             for (const t of INITIAL_DISCOVER_TASKS) {
-              await setDoc(doc(db, 'tasks', t.id), t);
+              if (!deletedIdsRef.current.includes(t.id)) {
+                await setDoc(doc(db, 'tasks', t.id), t);
+              }
             }
           } catch (error) {
             handleFirestoreError(error, OperationType.WRITE, 'tasks');
           }
           return;
         }
+
         if (!snapshot.empty) {
-          const loadedTasks = snapshot.docs.map(
-            (d) => d.data() as DiscoverTask
-          );
-          setTasks(loadedTasks);
+          markDatabaseSeeded();
         }
+
+        const delSet = new Set(deletedIdsRef.current);
+        snapshot.docs.forEach((d) => {
+          if (delSet.has(d.id)) {
+            deleteDoc(doc(db, 'tasks', d.id)).catch(() => {});
+          }
+        });
+
+        const loadedTasks = snapshot.docs
+          .map((d) => d.data() as DiscoverTask)
+          .filter((t) => !delSet.has(t.id));
+        setTasks(loadedTasks);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, 'tasks');
@@ -416,6 +637,7 @@ export default function App() {
     );
 
     return () => {
+      unsubSystemState();
       unsubUsers();
       unsubAds();
       unsubWithdrawals();
@@ -904,15 +1126,23 @@ export default function App() {
 
   // Admin: Update Ad
   const handleAdminUpdateAd = async (updatedAd: AdItem) => {
+    markDatabaseSeeded();
     const sanitizedAd: AdItem = {
-      ...updatedAd,
+      id: updatedAd.id.slice(0, 64),
       title: updatedAd.title.slice(0, 240),
       url: updatedAd.url.slice(0, 950),
       caption: updatedAd.caption.slice(0, 580),
-      sponsor: updatedAd.sponsor.slice(0, 110),
+      reward: Math.max(0, Number(updatedAd.reward) || 20),
+      durationSec: Math.max(1, Number(updatedAd.durationSec) || 5),
+      clicks: Math.max(0, Number(updatedAd.clicks) || 0),
+      sponsor: (updatedAd.sponsor || 'Sohoje Income Partner').slice(0, 110),
+      createdAt: (updatedAd.createdAt || '২৮ সেপ্টেম্বর ২০২৬').slice(0, 64),
     };
     setAds((prev) =>
       prev.map((a) => (a.id === sanitizedAd.id ? sanitizedAd : a))
+    );
+    setActiveAdModal((curr) =>
+      curr?.id === sanitizedAd.id ? sanitizedAd : curr
     );
     try {
       await setDoc(doc(db, 'ads', sanitizedAd.id), sanitizedAd);
@@ -924,6 +1154,8 @@ export default function App() {
   // Admin: Delete Ad
   const handleAdminDeleteAd = async (adId: string) => {
     setAds((prev) => prev.filter((a) => a.id !== adId));
+    setActiveAdModal((curr) => (curr?.id === adId ? null : curr));
+    await registerDeletedId(adId);
     try {
       await deleteDoc(doc(db, 'ads', adId));
     } catch (error) {
@@ -936,10 +1168,21 @@ export default function App() {
     id: string,
     status: WithdrawalStatus
   ) => {
+    markDatabaseSeeded();
     const target = withdrawals.find((w) => w.id === id);
     if (!target) return;
-    const updated: WithdrawalRequest = { ...target, status };
+    const updated: WithdrawalRequest = {
+      id: target.id.slice(0, 64),
+      userId: target.userId.slice(0, 64),
+      userName: target.userName.slice(0, 120),
+      accountNumber: target.accountNumber.slice(0, 32),
+      method: target.method,
+      amount: Math.max(1, Number(target.amount) || 500),
+      date: target.date.slice(0, 80),
+      status,
+    };
     setWithdrawals((prev) => prev.map((w) => (w.id === id ? updated : w)));
+    setLatestWithdrawalPopup((curr) => (curr?.id === id ? updated : curr));
     try {
       await setDoc(doc(db, 'withdrawals', id), updated);
     } catch (error) {
@@ -949,7 +1192,14 @@ export default function App() {
 
   // Admin: Delete Withdrawal
   const handleAdminDeleteWithdrawal = async (id: string) => {
-    setWithdrawals((prev) => prev.filter((w) => w.id !== id));
+    setWithdrawals((prev) => {
+      const next = prev.filter((w) => w.id !== id);
+      setLatestWithdrawalPopup((curr) =>
+        curr?.id === id ? next[0] || null : curr
+      );
+      return next;
+    });
+    await registerDeletedId(id);
     try {
       await deleteDoc(doc(db, 'withdrawals', id));
     } catch (error) {
@@ -966,6 +1216,7 @@ export default function App() {
     amount: number,
     status: WithdrawalStatus = 'সফল'
   ) => {
+    markDatabaseSeeded();
     const newReq: WithdrawalRequest = {
       id: `wd-${Date.now()}`,
       userId: userId.slice(0, 60),
@@ -990,6 +1241,7 @@ export default function App() {
     userId: string,
     newBalance: number
   ) => {
+    markDatabaseSeeded();
     const targetUser = users.find((u) => u.id === userId);
     if (!targetUser) return;
     const diff = newBalance - targetUser.currentBalance;
@@ -1020,6 +1272,12 @@ export default function App() {
   // Admin: Delete User
   const handleAdminDeleteUser = async (userId: string) => {
     setUsers((prev) => prev.filter((u) => u.id !== userId));
+    if (deviceUser?.id === userId) {
+      setDeviceUser(null);
+      localStorage.removeItem(STORAGE_KEYS.DEVICE_USER);
+      localStorage.removeItem(STORAGE_KEYS.DEVICE_USER_ID);
+    }
+    await registerDeletedId(userId);
     try {
       await deleteDoc(doc(db, 'users', userId));
     } catch (error) {
@@ -1035,6 +1293,7 @@ export default function App() {
     url: string,
     reward: number
   ) => {
+    markDatabaseSeeded();
     const newTask: DiscoverTask = {
       id: `task-${Date.now()}`,
       category,
@@ -1053,9 +1312,37 @@ export default function App() {
     }
   };
 
+  // Admin: Update Discover Task
+  const handleAdminUpdateTask = async (updatedTask: DiscoverTask) => {
+    markDatabaseSeeded();
+    const sanitizedTask: DiscoverTask = {
+      id: updatedTask.id.slice(0, 64),
+      category: updatedTask.category,
+      categoryLabel: (
+        CATEGORY_LABELS[updatedTask.category] ||
+        updatedTask.categoryLabel ||
+        'সোশ্যাল টাস্ক'
+      ).slice(0, 120),
+      title: updatedTask.title.slice(0, 240),
+      description: updatedTask.description.slice(0, 580),
+      url: updatedTask.url.slice(0, 950),
+      reward: Math.max(0, Number(updatedTask.reward) || 25),
+      participants: Math.max(0, Number(updatedTask.participants) || 1),
+    };
+    setTasks((prev) =>
+      prev.map((t) => (t.id === sanitizedTask.id ? sanitizedTask : t))
+    );
+    try {
+      await setDoc(doc(db, 'tasks', sanitizedTask.id), sanitizedTask);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'tasks');
+    }
+  };
+
   // Admin: Delete Discover Task
   const handleAdminDeleteTask = async (taskId: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    await registerDeletedId(taskId);
     try {
       await deleteDoc(doc(db, 'tasks', taskId));
     } catch (error) {
@@ -1268,6 +1555,7 @@ export default function App() {
             onUpdateUserBalance={handleAdminUpdateUserBalance}
             onDeleteUser={handleAdminDeleteUser}
             onAddTask={handleAdminAddTask}
+            onUpdateTask={handleAdminUpdateTask}
             onDeleteTask={handleAdminDeleteTask}
             onOpenAdminLogin={() => openSignInModal('admin')}
             onOpenCodeDownload={() => setCodeModalOpen(true)}

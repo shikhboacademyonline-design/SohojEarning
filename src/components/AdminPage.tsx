@@ -66,6 +66,7 @@ interface AdminPageProps {
     url: string,
     reward: number
   ) => void;
+  onUpdateTask?: (updatedTask: DiscoverTask) => void;
   onDeleteTask: (taskId: string) => void;
   onOpenAdminLogin: () => void;
   onAdminLogout: () => void;
@@ -90,6 +91,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   onUpdateUserBalance,
   onDeleteUser,
   onAddTask,
+  onUpdateTask,
   onDeleteTask,
   onAdminLogout,
   onOpenCodeDownload,
@@ -138,6 +140,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [taskDesc, setTaskDesc] = useState('');
   const [taskUrl, setTaskUrl] = useState('');
   const [taskReward, setTaskReward] = useState('30');
+
+  // Edit Discover Task state
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState('');
+  const [editTaskUrl, setEditTaskUrl] = useState('');
+  const [editTaskReward, setEditTaskReward] = useState('30');
+  const [editTaskDesc, setEditTaskDesc] = useState('');
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -1313,33 +1322,123 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             </h2>
             <div className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto pr-1">
               {tasks.map((t) => (
-                <div
-                  key={t.id}
-                  className="py-3.5 flex items-start justify-between gap-4"
-                >
-                  <div className="space-y-1 min-w-0">
-                    <div className="text-xs font-semibold text-emerald-700">
-                      {t.categoryLabel} · রিওয়ার্ড: ৳ {t.reward} · অংশগ্রহণ:{' '}
-                      {t.participants} জন
+                <div key={t.id} className="py-3.5 space-y-3">
+                  {editingTaskId === t.id ? (
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                      <div className="text-xs font-bold text-slate-800">
+                        ডিসকভার টাস্ক এডিট করুন
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <input
+                          type="text"
+                          value={editTaskTitle}
+                          onChange={(e) => setEditTaskTitle(e.target.value)}
+                          placeholder="শিরোনাম"
+                          className="sm:col-span-2 px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg"
+                        />
+                        <input
+                          type="number"
+                          value={editTaskReward}
+                          onChange={(e) => setEditTaskReward(e.target.value)}
+                          placeholder="রিওয়ার্ড (৳)"
+                          className="px-3 py-2 text-xs sm:text-sm font-mono-num bg-white border border-slate-200 rounded-lg"
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        value={editTaskUrl}
+                        onChange={(e) => setEditTaskUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="w-full px-3 py-2 text-xs font-mono-num bg-white border border-slate-200 rounded-lg"
+                      />
+                      <textarea
+                        rows={2}
+                        value={editTaskDesc}
+                        onChange={(e) => setEditTaskDesc(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!editTaskTitle.trim() || !editTaskUrl.trim()) {
+                              return;
+                            }
+                            const formattedUrl = editTaskUrl
+                              .trim()
+                              .startsWith('http')
+                              ? editTaskUrl.trim()
+                              : `https://${editTaskUrl.trim()}`;
+                            if (onUpdateTask) {
+                              onUpdateTask({
+                                ...t,
+                                title: editTaskTitle.trim(),
+                                url: formattedUrl,
+                                reward: Number(editTaskReward) || t.reward,
+                                description:
+                                  editTaskDesc.trim() || t.description,
+                              });
+                            }
+                            setEditingTaskId(null);
+                            showToast('ডিসকভার টাস্ক সফলভাবে আপডেট করা হয়েছে!');
+                          }}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>সেভ করুন</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingTaskId(null)}
+                          className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+                        >
+                          বাতিল
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-sm font-bold text-slate-900">
-                      {t.title}
+                  ) : (
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1 min-w-0">
+                        <div className="text-xs font-semibold text-emerald-700">
+                          {t.categoryLabel} · রিওয়ার্ড: ৳ {t.reward} · অংশগ্রহণ:{' '}
+                          {t.participants} জন
+                        </div>
+                        <div className="text-sm font-bold text-slate-900">
+                          {t.title}
+                        </div>
+                        <div className="text-xs font-mono-num text-slate-500 truncate">
+                          {t.url}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingTaskId(t.id);
+                            setEditTaskTitle(t.title);
+                            setEditTaskUrl(t.url);
+                            setEditTaskReward(String(t.reward));
+                            setEditTaskDesc(t.description);
+                          }}
+                          className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>এডিট</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDeleteTask(t.id);
+                            showToast('ডিসকভার টাস্কটি ডিলেট করা হয়েছে!');
+                          }}
+                          className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>ডিলেট</span>
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-xs font-mono-num text-slate-500 truncate">
-                      {t.url}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onDeleteTask(t.id);
-                      showToast('ডিসকভার টাস্কটি ডিলেট করা হয়েছে!');
-                    }}
-                    className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>ডিলেট</span>
-                  </button>
+                  )}
                 </div>
               ))}
             </div>
