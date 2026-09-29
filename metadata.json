@@ -1,0 +1,6 @@
+{
+  "name": "সহজে ইনকাম — Sohoje Income",
+  "description": "এড দেখে, সোশ্যাল টাস্ক সম্পন্ন করে এবং রেফার করে ঘরে বসে সহজে ইনকাম করার প্রফেশনাল প্ল্যাটফর্ম।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

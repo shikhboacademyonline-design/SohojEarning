@@ -1,0 +1,205 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll([
+        'id', 'code', 'name', 'mobile', 'avatar',
+        'currentBalance', 'totalEarned', 'adsWatched',
+        'watchedAdIds', 'completedTaskIds', 'referralCount',
+        'referralEarned', 'joinedDate'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'code', 'name', 'mobile', 'avatar',
+        'currentBalance', 'totalEarned', 'adsWatched',
+        'watchedAdIds', 'completedTaskIds', 'referralCount',
+        'referralEarned', 'joinedDate', 'referredBy'
+      ]) &&
+      data.id is string && data.id.size() <= 64 &&
+      data.code is string && data.code.size() <= 64 &&
+      data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+      data.mobile is string && data.mobile.size() >= 1 && data.mobile.size() <= 32 &&
+      data.avatar is string && data.avatar.size() <= 600000 &&
+      data.currentBalance is number && data.currentBalance >= 0 &&
+      data.totalEarned is number && data.totalEarned >= 0 &&
+      data.adsWatched is number && data.adsWatched >= 0 &&
+      data.watchedAdIds is list && data.watchedAdIds.size() <= 500 &&
+      data.completedTaskIds is list && data.completedTaskIds.size() <= 500 &&
+      data.referralCount is number && data.referralCount >= 0 &&
+      data.referralEarned is number && data.referralEarned >= 0 &&
+      data.joinedDate is string && data.joinedDate.size() <= 64 &&
+      (!('referredBy' in data) || (data.referredBy is string && data.referredBy.size() <= 64));
+    }
+
+    function isValidAd(data) {
+      return data.keys().hasAll([
+        'id', 'title', 'caption', 'url', 'reward',
+        'durationSec', 'clicks', 'sponsor', 'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'title', 'caption', 'url', 'reward',
+        'durationSec', 'clicks', 'sponsor', 'createdAt'
+      ]) &&
+      data.id is string && data.id.size() <= 64 &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+      data.caption is string && data.caption.size() <= 600 &&
+      data.url is string && data.url.size() >= 1 && data.url.size() <= 1000 &&
+      data.reward is number && data.reward >= 0 &&
+      data.durationSec is number && data.durationSec >= 1 &&
+      data.clicks is number && data.clicks >= 0 &&
+      data.sponsor is string && data.sponsor.size() <= 120 &&
+      data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidWithdrawal(data) {
+      return data.keys().hasAll([
+        'id', 'userId', 'userName', 'accountNumber',
+        'method', 'amount', 'date', 'status'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'userId', 'userName', 'accountNumber',
+        'method', 'amount', 'date', 'status'
+      ]) &&
+      data.id is string && data.id.size() <= 64 &&
+      data.userId is string && data.userId.size() <= 64 &&
+      data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 120 &&
+      data.accountNumber is string && data.accountNumber.size() >= 1 && data.accountNumber.size() <= 32 &&
+      data.method is string && data.method.size() <= 32 &&
+      data.amount is number && data.amount >= 1 &&
+      data.date is string && data.date.size() <= 80 &&
+      data.status is string && data.status.size() <= 32;
+    }
+
+    function isValidReferral(data) {
+      return data.keys().hasAll([
+        'id', 'referrerId', 'referrerCode', 'newUserName',
+        'newUserId', 'newUserMobile', 'date', 'commission'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'referrerId', 'referrerCode', 'newUserName',
+        'newUserId', 'newUserMobile', 'date', 'commission'
+      ]) &&
+      data.id is string && data.id.size() <= 64 &&
+      data.referrerId is string && data.referrerId.size() <= 64 &&
+      data.referrerCode is string && data.referrerCode.size() <= 64 &&
+      data.newUserName is string && data.newUserName.size() <= 120 &&
+      data.newUserId is string && data.newUserId.size() <= 64 &&
+      data.newUserMobile is string && data.newUserMobile.size() <= 32 &&
+      data.date is string && data.date.size() <= 80 &&
+      data.commission is number && data.commission >= 0;
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll([
+        'id', 'userName', 'role', 'organization',
+        'withdrawnAmount', 'method', 'comment', 'date'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'userName', 'role', 'organization',
+        'withdrawnAmount', 'method', 'comment', 'date'
+      ]) &&
+      data.id is string && data.id.size() <= 64 &&
+      data.userName is string && data.userName.size() <= 120 &&
+      data.role is string && data.role.size() <= 120 &&
+      data.organization is string && data.organization.size() <= 120 &&
+      data.withdrawnAmount is number && data.withdrawnAmount >= 0 &&
+      data.method is string && data.method.size() <= 32 &&
+      data.comment is string && data.comment.size() <= 1000 &&
+      data.date is string && data.date.size() <= 80;
+    }
+
+    function isValidEarning(data) {
+      return data.keys().hasAll([
+        'id', 'userId', 'title', 'category', 'amount', 'date'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'userId', 'title', 'category', 'amount', 'date'
+      ]) &&
+      data.id is string && data.id.size() <= 64 &&
+      data.userId is string && data.userId.size() <= 64 &&
+      data.title is string && data.title.size() <= 250 &&
+      data.category is string && data.category.size() <= 64 &&
+      data.amount is number && data.amount >= 0 &&
+      data.date is string && data.date.size() <= 80;
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll([
+        'id', 'category', 'categoryLabel', 'title',
+        'description', 'url', 'reward', 'participants'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'category', 'categoryLabel', 'title',
+        'description', 'url', 'reward', 'participants'
+      ]) &&
+      data.id is string && data.id.size() <= 64 &&
+      data.category is string && data.category.size() <= 64 &&
+      data.categoryLabel is string && data.categoryLabel.size() <= 120 &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+      data.description is string && data.description.size() <= 600 &&
+      data.url is string && data.url.size() >= 1 && data.url.size() <= 1000 &&
+      data.reward is number && data.reward >= 0 &&
+      data.participants is number && data.participants >= 0;
+    }
+
+    match /test/{docId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(docId);
+    }
+
+    match /users/{userId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(userId) && isValidUser(incoming()) && incoming().id == userId;
+      allow delete: if isValidId(userId);
+    }
+
+    match /ads/{adId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(adId) && isValidAd(incoming()) && incoming().id == adId;
+      allow delete: if isValidId(adId);
+    }
+
+    match /withdrawals/{withdrawalId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(withdrawalId) && isValidWithdrawal(incoming()) && incoming().id == withdrawalId;
+      allow delete: if isValidId(withdrawalId);
+    }
+
+    match /referrals/{referralId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(referralId) && isValidReferral(incoming()) && incoming().id == referralId;
+      allow delete: if isValidId(referralId);
+    }
+
+    match /reviews/{reviewId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(reviewId) && isValidReview(incoming()) && incoming().id == reviewId;
+      allow delete: if isValidId(reviewId);
+    }
+
+    match /earnings/{earningId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(earningId) && isValidEarning(incoming()) && incoming().id == earningId;
+      allow delete: if isValidId(earningId);
+    }
+
+    match /tasks/{taskId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(taskId) && isValidTask(incoming()) && incoming().id == taskId;
+      allow delete: if isValidId(taskId);
+    }
+  }
+}

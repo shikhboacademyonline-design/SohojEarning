@@ -1,0 +1,211 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Registered user account on Sohoje Income across any device",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "code": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 120 },
+        "mobile": { "type": "string", "maxLength": 32 },
+        "avatar": { "type": "string", "maxLength": 500000 },
+        "currentBalance": { "type": "number" },
+        "totalEarned": { "type": "number" },
+        "adsWatched": { "type": "number" },
+        "watchedAdIds": { "type": "array" },
+        "completedTaskIds": { "type": "array" },
+        "referralCount": { "type": "number" },
+        "referralEarned": { "type": "number" },
+        "joinedDate": { "type": "string", "maxLength": 64 },
+        "referredBy": { "type": "string", "maxLength": 64 }
+      },
+      "required": [
+        "id",
+        "code",
+        "name",
+        "mobile",
+        "avatar",
+        "currentBalance",
+        "totalEarned",
+        "adsWatched",
+        "watchedAdIds",
+        "completedTaskIds",
+        "referralCount",
+        "referralEarned",
+        "joinedDate"
+      ]
+    },
+    "AdItem": {
+      "title": "AdItem",
+      "description": "Sponsored advertisement link managed by Admin and watched by users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 250 },
+        "caption": { "type": "string", "maxLength": 600 },
+        "url": { "type": "string", "maxLength": 1000 },
+        "reward": { "type": "number" },
+        "durationSec": { "type": "number" },
+        "clicks": { "type": "number" },
+        "sponsor": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": [
+        "id",
+        "title",
+        "caption",
+        "url",
+        "reward",
+        "durationSec",
+        "clicks",
+        "sponsor",
+        "createdAt"
+      ]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "Mobile banking withdrawal request via bKash, Rocket, or Nagad",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 64 },
+        "userName": { "type": "string", "maxLength": 120 },
+        "accountNumber": { "type": "string", "maxLength": 32 },
+        "method": { "type": "string", "enum": ["বিকাশ", "রকেট", "নগদ"], "maxLength": 32 },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "maxLength": 80 },
+        "status": { "type": "string", "enum": ["পেন্ডিং", "সফল", "বাতিল"], "maxLength": 32 }
+      },
+      "required": [
+        "id",
+        "userId",
+        "userName",
+        "accountNumber",
+        "method",
+        "amount",
+        "date",
+        "status"
+      ]
+    },
+    "ReferralEntry": {
+      "title": "ReferralEntry",
+      "description": "Record of a user joining via a unique referral link",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referrerId": { "type": "string", "maxLength": 64 },
+        "referrerCode": { "type": "string", "maxLength": 64 },
+        "newUserName": { "type": "string", "maxLength": 120 },
+        "newUserId": { "type": "string", "maxLength": 64 },
+        "newUserMobile": { "type": "string", "maxLength": 32 },
+        "date": { "type": "string", "maxLength": 80 },
+        "commission": { "type": "number" }
+      },
+      "required": [
+        "id",
+        "referrerId",
+        "referrerCode",
+        "newUserName",
+        "newUserId",
+        "newUserMobile",
+        "date",
+        "commission"
+      ]
+    },
+    "UserReview": {
+      "title": "UserReview",
+      "description": "Payment proof review submitted by a member",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userName": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "maxLength": 120 },
+        "organization": { "type": "string", "maxLength": 120 },
+        "withdrawnAmount": { "type": "number" },
+        "method": { "type": "string", "maxLength": 32 },
+        "comment": { "type": "string", "maxLength": 1000 },
+        "date": { "type": "string", "maxLength": 80 }
+      },
+      "required": [
+        "id",
+        "userName",
+        "role",
+        "organization",
+        "withdrawnAmount",
+        "method",
+        "comment",
+        "date"
+      ]
+    },
+    "EarningRecord": {
+      "title": "EarningRecord",
+      "description": "Individual earning log for ad views, discover tasks, and referral bonuses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "maxLength": 250 },
+        "category": { "type": "string", "maxLength": 64 },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "maxLength": 80 }
+      },
+      "required": ["id", "userId", "title", "category", "amount", "date"]
+    },
+    "DiscoverTask": {
+      "title": "DiscoverTask",
+      "description": "Social task in Discover tab (Telegram, Facebook, YouTube)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "category": { "type": "string", "maxLength": 64 },
+        "categoryLabel": { "type": "string", "maxLength": 120 },
+        "title": { "type": "string", "maxLength": 250 },
+        "description": { "type": "string", "maxLength": 600 },
+        "url": { "type": "string", "maxLength": 1000 },
+        "reward": { "type": "number" },
+        "participants": { "type": "number" }
+      },
+      "required": [
+        "id",
+        "category",
+        "categoryLabel",
+        "title",
+        "description",
+        "url",
+        "reward",
+        "participants"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Stores all registered user accounts across all devices"
+    },
+    "/ads/{adId}": {
+      "schema": { "$ref": "#/entities/AdItem" },
+      "description": "Stores all active ad links and their click counts"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": { "$ref": "#/entities/WithdrawalRequest" },
+      "description": "Stores all user withdrawal requests and their status"
+    },
+    "/referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/ReferralEntry" },
+      "description": "Stores all referral signup records across devices"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/UserReview" },
+      "description": "Stores all user payment proof reviews"
+    },
+    "/earnings/{earningId}": {
+      "schema": { "$ref": "#/entities/EarningRecord" },
+      "description": "Stores earning activity history per user"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/DiscoverTask" },
+      "description": "Stores social tasks for the Discover tab"
+    }
+  }
+}
