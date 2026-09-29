@@ -337,7 +337,7 @@ export const AdViewerModal: React.FC<AdViewerModalProps> = ({
             </span>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => (completed ? onCompleteAd(ad) : onClose())}
             className="w-8 h-8 rounded-lg hover:bg-slate-800 flex items-center justify-center text-slate-300 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -359,7 +359,7 @@ export const AdViewerModal: React.FC<AdViewerModalProps> = ({
               <span>স্পন্সর: {ad.sponsor}</span>
               <span aria-hidden="true">·</span>
               <span className="font-mono-num text-emerald-700 font-semibold">
-                রিওয়ার্ড: ৳ {ad.reward}
+                রিওয়ার্ড: ৳ {ad.reward} (দিনে ১ বার)
               </span>
             </div>
             <h3 className="text-lg font-bold text-slate-900">{ad.title}</h3>
@@ -371,7 +371,7 @@ export const AdViewerModal: React.FC<AdViewerModalProps> = ({
             <div className="px-4 py-2.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-2 text-xs">
               <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>এডের লিংক অটোমেটিক ওপেন হয়েছে</span>
+                <span>এডের লিংক ওপেন হয়েছে (দিনে ১ বার প্রযোজ্য)</span>
               </span>
               <span className="font-mono-num text-slate-400 truncate max-w-[220px]">
                 {ad.url}
@@ -398,15 +398,6 @@ export const AdViewerModal: React.FC<AdViewerModalProps> = ({
                   + ৳ {ad.reward}.০০
                 </span>
               </div>
-              <a
-                href={ad.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <span>লিঙ্কটি পুনরায় নতুন ট্যাবে ওপেন করুন ({ad.url})</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
             </div>
           </div>
 

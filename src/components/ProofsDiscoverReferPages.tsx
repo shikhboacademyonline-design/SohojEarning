@@ -21,6 +21,7 @@ import {
   UserReview,
   WithdrawalRequest,
 } from '../types';
+import { hasDoneToday } from '../data/initialData';
 
 interface ProofsPageProps {
   withdrawals: WithdrawalRequest[];
@@ -320,12 +321,25 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
       onOpenSignIn();
       return;
     }
-    window.open(task.url, '_blank', 'noopener,noreferrer');
+    if (hasDoneToday(user.completedTaskIds, task.id)) {
+      return;
+    }
+    try {
+      const link = document.createElement('a');
+      link.href = task.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      // Fallback
+    }
     setVerifyingTaskId(task.id);
+    onCompleteTask(task);
     setTimeout(() => {
-      onCompleteTask(task);
       setVerifyingTaskId(null);
-    }, 1200);
+    }, 800);
   };
 
   const getCategoryIcon = (cat: DiscoverTask['category']) => {
@@ -382,7 +396,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
       {/* Tasks List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredTasks.map((task) => {
-          const isDone = user?.completedTaskIds.includes(task.id) ?? false;
+          const isDone = hasDoneToday(user?.completedTaskIds, task.id);
           const isVerifying = verifyingTaskId === task.id;
 
           return (
@@ -430,7 +444,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                   onClick={() => handleTaskAction(task)}
                   className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap transition-colors ${
                     isDone
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed'
                       : isVerifying
                       ? 'bg-slate-200 text-slate-700 cursor-wait'
                       : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
@@ -439,7 +453,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
                   {isDone ? (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>সম্পন্ন হয়েছে (+৳ {task.reward})</span>
+                      <span>আজকে সম্পন্ন হয়েছে (দিনে ১ বার)</span>
                     </>
                   ) : isVerifying ? (
                     <span>ভেরিফাই হচ্ছে...</span>

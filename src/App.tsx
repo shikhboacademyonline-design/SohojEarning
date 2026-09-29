@@ -31,6 +31,8 @@ import {
   INITIAL_REVIEWS,
   INITIAL_USERS,
   INITIAL_WITHDRAWALS,
+  hasDoneToday,
+  makeDailyStamp,
 } from './data/initialData';
 import {
   db,
@@ -696,6 +698,13 @@ export default function App() {
     const generatedCode = `SHJ-${String(randomDigits).slice(0, 4)}`;
     const todayStr = '২৮ সেপ্টেম্বর ২০২৬';
 
+    const initialWatchedAds = pendingAdAfterSignIn
+      ? [pendingAdAfterSignIn.id, makeDailyStamp(pendingAdAfterSignIn.id)]
+      : [];
+    if (pendingAdAfterSignIn) {
+      unrewardedAdStampRef.current.add(makeDailyStamp(pendingAdAfterSignIn.id));
+    }
+
     const newUser: UserProfile = {
       id: generatedId,
       code: generatedCode,
@@ -705,7 +714,7 @@ export default function App() {
       currentBalance: 50,
       totalEarned: 50,
       adsWatched: 0,
-      watchedAdIds: [],
+      watchedAdIds: initialWatchedAds,
       completedTaskIds: [],
       referralCount: 0,
       referralEarned: 0,
@@ -797,22 +806,61 @@ export default function App() {
     return false;
   };
 
-  // Ad Click Handler
-  const handleAdClick = (ad: AdItem, openedByAnchor = false) => {
+  const unrewardedAdStampRef = useRef<Set<string>>(new Set());
+
+  // Ad Click Handler (Once per day per ad)
+  const handleAdClick = async (ad: AdItem, openedByAnchor = false) => {
     if (!deviceUser) {
       setPendingAdAfterSignIn(ad);
       openSignInModal('user');
       return;
     }
+    if (hasDoneToday(deviceUser.watchedAdIds, ad.id)) {
+      return;
+    }
+    const stamp = makeDailyStamp(ad.id);
+    unrewardedAdStampRef.current.add(stamp);
+
+    const updatedUserWithStamp: UserProfile = {
+      ...deviceUser,
+      watchedAdIds: Array.from(
+        new Set([...deviceUser.watchedAdIds, ad.id, stamp])
+      ).slice(-450),
+    };
+    setDeviceUser(updatedUserWithStamp);
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === updatedUserWithStamp.id ? updatedUserWithStamp : u
+      )
+    );
+
     if (!openedByAnchor) {
       triggerAutoOpenUrl(ad.url);
     }
     setActiveAdModal(ad);
+
+    try {
+      await setDoc(
+        doc(db, 'users', updatedUserWithStamp.id),
+        sanitizeUserForFirestore(updatedUserWithStamp)
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'users');
+    }
   };
 
-  // Ad Completion Handler
+  // Ad Completion Handler (Once per day per ad)
   const handleCompleteAd = async (ad: AdItem) => {
     if (!deviceUser) return;
+    const stamp = makeDailyStamp(ad.id);
+    if (
+      hasDoneToday(deviceUser.watchedAdIds, ad.id) &&
+      !unrewardedAdStampRef.current.has(stamp)
+    ) {
+      setActiveAdModal(null);
+      return;
+    }
+    unrewardedAdStampRef.current.delete(stamp);
     const todayStr = '২৮ সেপ্টেম্বর ২০২৬';
 
     const updatedAd: AdItem = {
@@ -825,7 +873,9 @@ export default function App() {
       currentBalance: deviceUser.currentBalance + ad.reward,
       totalEarned: deviceUser.totalEarned + ad.reward,
       adsWatched: deviceUser.adsWatched + 1,
-      watchedAdIds: Array.from(new Set([...deviceUser.watchedAdIds, ad.id])),
+      watchedAdIds: Array.from(
+        new Set([...deviceUser.watchedAdIds, ad.id, makeDailyStamp(ad.id)])
+      ).slice(-450),
     };
 
     const earnEntry: EarningRecord = {
@@ -877,17 +927,23 @@ export default function App() {
     }
   };
 
-  // Complete Discover Task
+  // Complete Discover Task (Once per day per task)
   const handleCompleteTask = async (task: DiscoverTask) => {
     if (!deviceUser) return;
-    if (deviceUser.completedTaskIds.includes(task.id)) return;
+    if (hasDoneToday(deviceUser.completedTaskIds, task.id)) return;
 
     const todayStr = '২৮ সেপ্টেম্বর ২০২৬';
     const updatedUser: UserProfile = {
       ...deviceUser,
       currentBalance: deviceUser.currentBalance + task.reward,
       totalEarned: deviceUser.totalEarned + task.reward,
-      completedTaskIds: [...deviceUser.completedTaskIds, task.id],
+      completedTaskIds: Array.from(
+        new Set([
+          ...deviceUser.completedTaskIds,
+          task.id,
+          makeDailyStamp(task.id),
+        ])
+      ).slice(-450),
     };
 
     const updatedTask: DiscoverTask = {

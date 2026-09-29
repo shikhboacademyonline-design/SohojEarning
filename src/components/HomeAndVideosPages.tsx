@@ -11,7 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { AdItem, NavTab, UserProfile, WithdrawalRequest } from '../types';
-import { ASSETS } from '../data/initialData';
+import { ASSETS, hasDoneToday } from '../data/initialData';
 
 interface HomePageProps {
   user: UserProfile | null;
@@ -176,12 +176,20 @@ export const HomePage: React.FC<HomePageProps> = ({
 
         <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100">
           {ads.map((ad, index) => {
-            const isWatched = user?.watchedAdIds.includes(ad.id) ?? false;
+            const isWatchedToday = hasDoneToday(user?.watchedAdIds, ad.id);
             return (
               <div
                 key={ad.id}
-                onClick={() => onAdClick(ad)}
-                className="p-4 sm:p-5 hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer"
+                onClick={() => {
+                  if (!isWatchedToday) {
+                    onAdClick(ad);
+                  }
+                }}
+                className={`p-4 sm:p-5 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                  isWatchedToday
+                    ? 'bg-slate-50/50 cursor-default'
+                    : 'hover:bg-slate-50/80 cursor-pointer'
+                }`}
               >
                 <div className="flex items-start gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 font-mono-num text-xs font-bold flex items-center justify-center shrink-0">
@@ -214,32 +222,30 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
 
                   {user ? (
-                    <a
-                      href={ad.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAdClick(ad, true);
-                      }}
-                      className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer ${
-                        isWatched
-                          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      }`}
-                    >
-                      {isWatched ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>পুনরায় এড ওপেন করুন</span>
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3.5 h-3.5" />
-                          <span>এড ওপেন করুন</span>
-                        </>
-                      )}
-                    </a>
+                    isWatchedToday ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>আজকে সম্পন্ন হয়েছে (দিনে ১ বার)</span>
+                      </button>
+                    ) : (
+                      <a
+                        href={ad.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAdClick(ad, true);
+                        }}
+                        className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap transition-colors cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        <span>এড ওপেন করুন</span>
+                      </a>
+                    )
                   ) : (
                     <button
                       type="button"
@@ -377,7 +383,7 @@ export const VideosPage: React.FC<VideosPageProps> = ({
       <div className="space-y-4">
         {ads.map((ad, idx) => {
           const serialNumber = idx + 1;
-          const isWatched = user?.watchedAdIds.includes(ad.id) ?? false;
+          const isWatchedToday = hasDoneToday(user?.watchedAdIds, ad.id);
 
           return (
             <article
@@ -426,24 +432,27 @@ export const VideosPage: React.FC<VideosPageProps> = ({
                 </span>
 
                 {user ? (
-                  <a
-                    href={ad.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => onAdClick(ad, true)}
-                    className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                      isWatched
-                        ? 'bg-slate-900 hover:bg-slate-800 text-white'
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                    }`}
-                  >
-                    <Play className="w-4 h-4" />
-                    <span>
-                      {isWatched
-                        ? `পুনরায় এড ওপেন করুন (৳ ${ad.reward})`
-                        : `এড ওপেন করুন ও ৳ ${ad.reward} ইনকাম করুন`}
-                    </span>
-                  </a>
+                  isWatchedToday ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>আজকে দেখা সম্পন্ন হয়েছে (দিনে ১ বার)</span>
+                    </button>
+                  ) : (
+                    <a
+                      href={ad.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => onAdClick(ad, true)}
+                      className="min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      <Play className="w-4 h-4" />
+                      <span>এড ওপেন করুন ও ৳ {ad.reward} ইনকাম করুন</span>
+                    </a>
+                  )
                 ) : (
                   <button
                     type="button"

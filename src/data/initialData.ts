@@ -17,6 +17,26 @@ export const ASSETS = {
   videoPromo: videoPromoImg,
 };
 
+export function getTodayKey(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function makeDailyStamp(itemId: string): string {
+  return `${itemId}|${getTodayKey()}`;
+}
+
+export function hasDoneToday(
+  list: string[] | undefined,
+  itemId: string
+): boolean {
+  if (!Array.isArray(list)) return false;
+  return list.includes(makeDailyStamp(itemId));
+}
+
 export const AUTO_CAPTIONS: string[] = [
   'মাত্র ১০ সেকেন্ড সম্পূর্ণ ভিডিও এডটি দেখুন এবং তাৎক্ষণিক আপনার ওয়ালেটে ক্যাশ রিওয়ার্ড জমা করুন।',
   'স্পন্সরড প্রিমিয়াম ব্র্যান্ড ক্যাম্পেইন—এডটি ওপেন করে নির্ধারিত সময় অপেক্ষা করলেই নিশ্চিত ইনকাম।',
